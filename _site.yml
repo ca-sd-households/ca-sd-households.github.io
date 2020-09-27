@@ -2,6 +2,7 @@ name: "households-website"
 output_dir: "."
 navbar:
   title: "California School District Households Project"
+  pagetitle: "California School District Households Project"
   left:
     - text: "About"
       href: index.html
