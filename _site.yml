@@ -7,8 +7,8 @@ navbar:
     - text: "About"
       href: index.html
     - text: "Multigenerational"
-      href: multigen.html
-output:
+      href: mg2.html
+  output:
   html_document:
     theme: simplex
     css: style.css
