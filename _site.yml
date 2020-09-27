@@ -1,0 +1,13 @@
+name: "households-website"
+output_dir: "."
+navbar:
+  title: "California School District Households Project"
+  left:
+    - text: "About"
+      href: index.html
+    - text: "Multigenerational"
+      href: multigen.html
+output:
+  html_document:
+    theme: simplex
+    css: style.css
