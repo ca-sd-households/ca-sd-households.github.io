@@ -7,7 +7,7 @@ navbar:
     - text: "About"
       href: index.html
     - text: "Multigenerational"
-      href: mg2.html
+      href: mg.html
   output:
   html_document:
     theme: simplex
