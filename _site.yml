@@ -6,8 +6,10 @@ navbar:
   left:
     - text: "About"
       href: index.html
-    - text: "Multigenerational"
+    - text: "Multigenerational Estimates Map"
       href: mg.html
+    - text: "R Code"
+      href: code.html
   output:
   html_document:
     theme: simplex

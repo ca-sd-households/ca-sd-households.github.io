@@ -1,0 +1,148 @@
+---
+title: "Code for Leaflet Map"
+output: html_document
+---
+
+
+```{r message=FALSE, warning=FALSE}
+##############################################################################
+######%%Austin Lyke%%###################################################################
+#######%%alyke@ucla.edu%%##########################################
+#########%%Last Edit Dec 2020%%#######################################
+#########%%Final Map at https://ca-sd-households.github.io/%%#############
+##############################################################################
+
+###libraries####
+library(leaflet)
+library(htmlwidgets)
+library(mapview)
+library(tidyverse)
+library(htmlwidgets)
+library(tidycensus)
+library(reshape2)
+library(sf)
+library(rgeos)
+library(leaflet)
+library(htmlwidgets)
+
+########load california elementary district data
+ca_elem <- tidycensus::get_acs(geography = "school district (elementary)", state="CA",
+                               variables = c(enr1="B14002_008",enr2="B14002_011",enr3="B14002_014",enr4="B14002_017",enr5="B14002_032",enr6="B14002_035",enr7="B14002_038",enr8="B14002_041",grandparents="B10063_002",total="B01003_001"),year=2018,geometry = TRUE)
+
+###save geospatial data and reshape df
+ca_elem_g<-ca_elem[!duplicated(ca_elem$GEOID),]
+
+ca_elem<-dcast(ca_elem, NAME+GEOID~ variable, value.var = "estimate")
+ca_elem$geometry<-ca_elem_g$geometry
+###enrollment total and grandparent % vars
+ca_elem<- ca_elem %>%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+########load california elementary district data
+ca_second <- tidycensus::get_acs(geography = "school district (secondary)", state="CA",
+                                 variables = c(enr1="B14002_008",enr2="B14002_011",enr3="B14002_014",enr4="B14002_017",enr5="B14002_032",enr6="B14002_035",enr7="B14002_038",enr8="B14002_041",grandparents="B10063_002",total="B01003_001"),year=2018,geometry = TRUE)
+
+###save geospatial data & reshape df
+ca_sec_g<-ca_second[!duplicated(ca_second$GEOID),]
+
+ca_second<-dcast(ca_second, NAME+GEOID~ variable, value.var = "estimate")
+ca_second$geometry<-ca_sec_g$geometry
+
+###enrollment total and grandparent % vars
+ca_second<- ca_second %>%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+#########load california unified district data
+ca_unif<- tidycensus::get_acs(geography = "school district (unified)", state="CA",
+                              variables = c(enr1="B14002_008",enr2="B14002_011",enr3="B14002_014",enr4="B14002_017",enr5="B14002_032",enr6="B14002_035",enr7="B14002_038",enr8="B14002_041",grandparents="B10063_002",total="B01003_001"),year=2018,geometry = TRUE)
+###save geospatial data & reshape df
+ca_unif_g<-ca_unif[!duplicated(ca_unif$GEOID),]
+ca_unif<-dcast(ca_unif, NAME+GEOID~ variable, value.var = "estimate")
+
+ca_unif$geometry<-ca_unif_g$geometry
+
+
+###enrollment total and grandparent % vars
+ca_unif<- ca_unif %>%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+#######geospatial df
+ca_elem_g<-ca_elem_g%>%select(NAME,geometry)
+ca_unif_g<-ca_unif_g%>%select(NAME,geometry)
+ca_sec_g<-ca_sec_g%>%select(NAME,geometry)
+ca_geo<-rbind(ca_elem_g,ca_unif_g,ca_sec_g)
+ca_geo<-ca_geo %>% arrange(NAME)
+
+ca_geo<-ca_geo%>% filter(!st_is_empty(geometry))
+
+
+#######CA total districts
+
+ca_tot<-rbind(ca_elem,ca_second,ca_unif)
+
+###alpabetize obvs
+
+ca_tot<-ca_tot %>% arrange(NAME)
+
+###create multigen variable
+ca_tot<-ca_tot %>%
+  mutate(mg_students=enr_tot*gp_per)
+
+###remove empty geometries and "remainder of California", rename ca for simplicity
+
+ca_tot<-ca_tot%>% filter(!NAME=="Remainder of California, California")
+
+ca<-ca_tot
+
+###alter some variables for leaflet map popups
+ca$gp_per<-ca$gp_per*100
+ca$mg_students<-as.numeric(as.character(ca$mg_students))
+
+###districts for leaflet map
+districts <- distinct(ca, NAME, mg_students,enr_tot,gp_per)
+distname <- districts$NAME
+
+####create spatial polygons
+ca_sp <- as_Spatial(ca_geo$geometry)
+row.names(ca_sp)<-districts$NAME
+
+###spatial polygons data frame
+
+df.polygon<-SpatialPolygonsDataFrame(ca_sp, 
+                                     data=data.frame(row.names=distname, districts))
+
+df.polygon$gp_per<-df.polygon$gp_per/100
+
+###bins for plotting, # multigen students
+risk.bins <-c(0, 100, 250, 1000, 5000, 15000)
+
+###add popup
+popup <- paste0("DISTRICT: ", df.polygon$NAME, "<br>", "Enrollment: ", format(df.polygon$enr_tot,big.mark=",",scientific=FALSE), "<br>", "% Multigenerational Households: ", round(ca$gp_per,1),"<br>", "Estimated studens in MG Households: ", scales::comma(df.polygon$mg_students))
+
+pal <- colorBin(
+  #palette = "BuPu"
+  palette = "RdYlBu"
+  , domain = ca$mg_stu
+  , bins = risk.bins
+  , reverse = TRUE
+)
+
+
+
+map1<-leaflet() %>%
+  addTiles(attribution = 'Data: Census ACS 2014-2018') %>%
+  addProviderTiles(leaflet::providers$CartoDB.Positron) %>%
+  addPolygons(data = df.polygon, 
+              fillColor = ~pal(mg_students), 
+              color = "#A6ABAD", # you need to use hex colors
+              fillOpacity = .9, 
+              weight = .5, 
+              smoothFactor = .3,
+              popup = popup,opacity=1) %>%
+  addLegend(pal = pal, 
+            values = df.polygon$mg_students, 
+            position = "bottomright", 
+            title = "Estimated Students in Multigenerational<br>Households") 
+
+
+```

@@ -11,7 +11,7 @@
 
 
 
-<title>mg.knit</title>
+<title>Code for Leaflet Map</title>
 
 <script src="site_libs/header-attrs-2.10/header-attrs.js"></script>
 <script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
@@ -262,15 +262,149 @@ $(document).ready(function () {
 
 
 
+<h1 class="title toc-ignore">Code for Leaflet Map</h1>
 
 </div>
 
 
-<p><br></p>
-<iframe src="multigen.html" width="100%" height="1080px">
-</iframe>
-<div>
+<pre class="r"><code>##############################################################################
+######%%Austin Lyke%%###################################################################
+#######%%alyke@ucla.edu%%##########################################
+#########%%Last Edit Dec 2020%%#######################################
+#########%%Final Map at https://ca-sd-households.github.io/%%#############
+##############################################################################
 
+###libraries####
+library(leaflet)
+library(htmlwidgets)
+library(mapview)
+library(tidyverse)
+library(htmlwidgets)
+library(tidycensus)
+library(reshape2)
+library(sf)
+library(rgeos)
+library(leaflet)
+library(htmlwidgets)
+
+########load california elementary district data
+ca_elem &lt;- tidycensus::get_acs(geography = &quot;school district (elementary)&quot;, state=&quot;CA&quot;,
+                               variables = c(enr1=&quot;B14002_008&quot;,enr2=&quot;B14002_011&quot;,enr3=&quot;B14002_014&quot;,enr4=&quot;B14002_017&quot;,enr5=&quot;B14002_032&quot;,enr6=&quot;B14002_035&quot;,enr7=&quot;B14002_038&quot;,enr8=&quot;B14002_041&quot;,grandparents=&quot;B10063_002&quot;,total=&quot;B01003_001&quot;),year=2018,geometry = TRUE)
+
+###save geospatial data and reshape df
+ca_elem_g&lt;-ca_elem[!duplicated(ca_elem$GEOID),]
+
+ca_elem&lt;-dcast(ca_elem, NAME+GEOID~ variable, value.var = &quot;estimate&quot;)
+ca_elem$geometry&lt;-ca_elem_g$geometry
+###enrollment total and grandparent % vars
+ca_elem&lt;- ca_elem %&gt;%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+########load california elementary district data
+ca_second &lt;- tidycensus::get_acs(geography = &quot;school district (secondary)&quot;, state=&quot;CA&quot;,
+                                 variables = c(enr1=&quot;B14002_008&quot;,enr2=&quot;B14002_011&quot;,enr3=&quot;B14002_014&quot;,enr4=&quot;B14002_017&quot;,enr5=&quot;B14002_032&quot;,enr6=&quot;B14002_035&quot;,enr7=&quot;B14002_038&quot;,enr8=&quot;B14002_041&quot;,grandparents=&quot;B10063_002&quot;,total=&quot;B01003_001&quot;),year=2018,geometry = TRUE)
+
+###save geospatial data &amp; reshape df
+ca_sec_g&lt;-ca_second[!duplicated(ca_second$GEOID),]
+
+ca_second&lt;-dcast(ca_second, NAME+GEOID~ variable, value.var = &quot;estimate&quot;)
+ca_second$geometry&lt;-ca_sec_g$geometry
+
+###enrollment total and grandparent % vars
+ca_second&lt;- ca_second %&gt;%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+#########load california unified district data
+ca_unif&lt;- tidycensus::get_acs(geography = &quot;school district (unified)&quot;, state=&quot;CA&quot;,
+                              variables = c(enr1=&quot;B14002_008&quot;,enr2=&quot;B14002_011&quot;,enr3=&quot;B14002_014&quot;,enr4=&quot;B14002_017&quot;,enr5=&quot;B14002_032&quot;,enr6=&quot;B14002_035&quot;,enr7=&quot;B14002_038&quot;,enr8=&quot;B14002_041&quot;,grandparents=&quot;B10063_002&quot;,total=&quot;B01003_001&quot;),year=2018,geometry = TRUE)
+###save geospatial data &amp; reshape df
+ca_unif_g&lt;-ca_unif[!duplicated(ca_unif$GEOID),]
+ca_unif&lt;-dcast(ca_unif, NAME+GEOID~ variable, value.var = &quot;estimate&quot;)
+
+ca_unif$geometry&lt;-ca_unif_g$geometry
+
+
+###enrollment total and grandparent % vars
+ca_unif&lt;- ca_unif %&gt;%
+  mutate(enr_tot= enr1+enr2+enr3+enr4+enr5+enr6+enr7+enr8, gp_per=grandparents/total)
+
+#######geospatial df
+ca_elem_g&lt;-ca_elem_g%&gt;%select(NAME,geometry)
+ca_unif_g&lt;-ca_unif_g%&gt;%select(NAME,geometry)
+ca_sec_g&lt;-ca_sec_g%&gt;%select(NAME,geometry)
+ca_geo&lt;-rbind(ca_elem_g,ca_unif_g,ca_sec_g)
+ca_geo&lt;-ca_geo %&gt;% arrange(NAME)
+
+ca_geo&lt;-ca_geo%&gt;% filter(!st_is_empty(geometry))
+
+
+#######CA total districts
+
+ca_tot&lt;-rbind(ca_elem,ca_second,ca_unif)
+
+###alpabetize obvs
+
+ca_tot&lt;-ca_tot %&gt;% arrange(NAME)
+
+###create multigen variable
+ca_tot&lt;-ca_tot %&gt;%
+  mutate(mg_students=enr_tot*gp_per)
+
+###remove empty geometries and &quot;remainder of California&quot;, rename ca for simplicity
+
+ca_tot&lt;-ca_tot%&gt;% filter(!NAME==&quot;Remainder of California, California&quot;)
+
+ca&lt;-ca_tot
+
+###alter some variables for leaflet map popups
+ca$gp_per&lt;-ca$gp_per*100
+ca$mg_students&lt;-as.numeric(as.character(ca$mg_students))
+
+###districts for leaflet map
+districts &lt;- distinct(ca, NAME, mg_students,enr_tot,gp_per)
+distname &lt;- districts$NAME
+
+####create spatial polygons
+ca_sp &lt;- as_Spatial(ca_geo$geometry)
+row.names(ca_sp)&lt;-districts$NAME
+
+###spatial polygons data frame
+
+df.polygon&lt;-SpatialPolygonsDataFrame(ca_sp, 
+                                     data=data.frame(row.names=distname, districts))
+
+df.polygon$gp_per&lt;-df.polygon$gp_per/100
+
+###bins for plotting, # multigen students
+risk.bins &lt;-c(0, 100, 250, 1000, 5000, 15000)
+
+###add popup
+popup &lt;- paste0(&quot;DISTRICT: &quot;, df.polygon$NAME, &quot;&lt;br&gt;&quot;, &quot;Enrollment: &quot;, format(df.polygon$enr_tot,big.mark=&quot;,&quot;,scientific=FALSE), &quot;&lt;br&gt;&quot;, &quot;% Multigenerational Households: &quot;, round(ca$gp_per,1),&quot;&lt;br&gt;&quot;, &quot;Estimated studens in MG Households: &quot;, scales::comma(df.polygon$mg_students))
+
+pal &lt;- colorBin(
+  #palette = &quot;BuPu&quot;
+  palette = &quot;RdYlBu&quot;
+  , domain = ca$mg_stu
+  , bins = risk.bins
+  , reverse = TRUE
+)
+
+
+
+map1&lt;-leaflet() %&gt;%
+  addTiles(attribution = &#39;Data: Census ACS 2014-2018&#39;) %&gt;%
+  addProviderTiles(leaflet::providers$CartoDB.Positron) %&gt;%
+  addPolygons(data = df.polygon, 
+              fillColor = ~pal(mg_students), 
+              color = &quot;#A6ABAD&quot;, # you need to use hex colors
+              fillOpacity = .9, 
+              weight = .5, 
+              smoothFactor = .3,
+              popup = popup,opacity=1) %&gt;%
+  addLegend(pal = pal, 
+            values = df.polygon$mg_students, 
+            position = &quot;bottomright&quot;, 
+            title = &quot;Estimated Students in Multigenerational&lt;br&gt;Households&quot;) </code></pre>
 
 
 
